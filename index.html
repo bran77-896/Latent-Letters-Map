@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Latent Letters Visualization</title>
+<style>
+	html, body { margin: 0; height: 100%; background: #111; color: #eee; font-family: -apple-system, system-ui, sans-serif; overflow: hidden; }
+	#map { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+	#info { position: absolute; left: 20px; top: 16px; max-width: 440px; font-size: 16px; line-height: 1.4; color: #aaa; pointer-events: none; }
+	#info b { color: #eee; }
+	#panel { position: absolute; left: 20px; right: 20px; bottom: 20px; display: flex; gap: 10px; }
+	#panel input { flex: 1; font-size: 18px; padding: 12px 14px; border-radius: 10px; border: 1px solid #444; background: #1c1c1c; color: #eee; }
+	#panel button { font-size: 18px; padding: 12px 18px; border-radius: 10px; border: 0; background: #eee; color: #111; }
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+<div id="info"><b>Every dot is the color of a real flower from the datasets.</b> Type anything you want, a feeling, phrase, name, etc. and see where it gets matched.</div>
+<form id="panel">
+	<input id="text" placeholder="Hi, how are you?" maxlength="200" autocomplete="off">
+	<button type="submit">Send</button>
+	<button type="button" id="suprise">Surprise Me</button>
+</form>
+
+<script type="module">
+
+import { pipeline } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2";
+
+const info = document.getElementById("info");
+let model = null;
+
+async function loadBin(name) {
+	const res = await fetch(name + ".bin");
+	return new Float32Array(await res.arrayBuffer());
+}
+
+async function loadModel() {
+	const [meta, w1, b1, w2, b2, gallery] = await Promise.all([
+		fetch("meta.json").then((r) => r.json()),
+		loadBin("w1"), loadBin("b1"), loadBin("w2"), loadBin("b2"), loadBin("gallery"),
+	]);
+	const extractor = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2", { dtype: "fp32"});
+	model = { meta, w1, b1, w2, b2, gallery, extractor };
+}
+
+
+function erf(x) {
+	const sign = Math.sign(x);
+	x = Math.abs(x);
+	const t = 1 / (1 +0.3275911 *x);
+	const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+	return sign * y;
+}
+
+
+function gelu(x) {
+	return 0.5 * x * (1 + erf(x / Math.SQRT2));
+}
+
+function linear(x, W, b, nIn, nOut) {
+	const y = new Float32Array(nOut);
+	for (let o = 0; o < nOut; o++) {
+		let sum = b[o];
+		for (let i = 0; i < nIn; i++) {
+			sum += W[o * nIn + i] * x[i];
+		}
+		y[o] = sum;
+	}
+	return y;
+}
+
+
+function normalize(v) {
+	let len = 0;
+	for (const a of v) len += a * a;
+	len = Math.sqrt(len);
+	return v.map((a) => a /len);
+}
+
+
+async function embed(text) {
+	const out = await model.extractor(text, { pooling: "mean", normalize: true });
+	const h = linear(out.data, model.w1, model.b1, 384, 256).map(gelu);
+	return normalize(linear(h, model.w2, model.b2, 256, 64));
+}
+
+
+function nearest(z, k) {
+	const n = model.meta.n_gallery;
+	const sims = new Float32Array(n);
+	for (let r = 0; r < n; r++) {
+		let dot = 0;
+		for (let j = 0; j < 64; j++) dot += z[j] * model.gallery[r * 64 +j];
+		sims[r] = dot;
+	}
+	const idx = Array.from(sims.keys());
+	idx.sort((a, b) => sims[b] - sims[a]);
+	return idx.slice(0, k);
+}
+
+function toMap(z) {
+	const { center, axes, lo, hi } = model.meta;
+	return [0, 1].map((d) => {
+		let v = 0;
+		for (let j = 0; j < 64; j++) v += (z[j] - center[j]) * axes[d][j];
+		return Math.min(1, Math.max(0, (v-lo[d]) / (hi[d] - lo[d])));
+	});
+}
+
+
+
+const SURPRISES = [
+	"I just got the best news of my life!",
+	"I'm so angry!",
+	"I feel so lonely without my friends.",
+	"What a peaceful morning by the lake.",
+	"I am so nervous about my presentation tomorrow.",
+	"My trip to Spain was amazing!",
+	"Winter is my favorite season. The cold weather feels so nice.",
+	"I'm so frustrated! Why won't my project work?!",
+	"The sun is warm and I feel content.",
+	"This movie is so scary; I don't want to see what comes next.",
+	"This class is so boring.",
+	"I can't stop laughing!",
+];
+
+
+const PAD = 70;
+const PANEL = 90;
+const IDLE_MS = 60000;
+
+
+const canvas = document.getElementById("map");
+const ctx = canvas.getContext("2d");
+const input = document.getElementById("text");
+
+let points = [];
+let current = null;
+let idleTimer = null;
+
+function resize() {
+	const dpr = window.devicePixelRatio || 1;
+	canvas.width = canvas.clientWidth * dpr;
+	canvas.height = canvas.clientHeight * dpr;
+
+	ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+
+function toScreen(x, y){
+	const w = canvas.clientWidth;
+	const h = canvas.clientHeight;
+	return [PAD + x * (w - 2 * PAD), PAD + y * (h - 2 * PAD - PANEL)];
+}
+
+
+function drawAxes(w, h) {
+	const bottom = h - PAD - PANEL;
+	ctx.fillStyle = "#777";
+	ctx.font = "15px -apple-system, system-ui, sans-serif";
+	ctx.textAlign = "left";
+	ctx.fillText("<- less pleasant", PAD, bottom + 30);
+	ctx.textAlign = "right";
+	ctx.fillText("more pleasant ->", w - PAD, bottom + 30);
+	ctx.save();
+	ctx.translate(PAD - 30, h / 2 - PANEL / 2);
+	ctx.rotate(-Math.PI / 2);
+	ctx.textAlign = "center";
+	ctx.fillText("calmer        -       more energy ->", 0, 0);
+	ctx.restore();
+}
+
+
+function draw(now) {
+	const w = canvas.clientWidth;
+	const h = canvas.clientHeight;
+	ctx.clearRect(0, 0, w, h);
+
+	ctx.globalAlpha = current ? 0.35 : 0.9;
+	for (const [x, y, color] of points){ 
+		const [sx, sy] = toScreen(x, y);
+		ctx.fillStyle = color;
+		ctx.fillRect(sx - 2, sy - 2, 4, 4);
+	}
+	ctx.globalAlpha = 1;
+	drawAxes(w, h);
+
+	if (current) {
+		const t = Math.min((now - current.start) / 1000, 1);
+		const [cx, cy] = toScreen(current.x, current.y);
+
+		current.top.forEach((i, k) => {
+			const [px, py] = toScreen(points[i][0], points[i][1]);
+			const grow = Math.max(0, Math.min(1, t * 1.8 - k * 0.08));
+			ctx.strokeStyle = points[i][2];
+			ctx.lineWidth = 1.5;
+			ctx.beginPath();
+			ctx.moveTo(cx, cy);
+			ctx.lineTo(cx + (px - cx) * grow, cy + (py -cy) * grow);
+			ctx.stroke();
+			if (grow >= 1) {
+				ctx.fillStyle = points[i][2];
+				ctx.beginPath();
+				ctx.arc(px, py, 7, 0, Math.PI * 2);
+				ctx.fill();
+			}
+		});
+
+		ctx.fillStyle = "#fff";
+		ctx.beginPath();
+		ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+		ctx.fill();
+		ctx.font = "17px -apple-system, system-ui, sans-serif";
+		const onRight = cx > w / 2;
+		ctx.textAlign = onRight ? "right" : "left";
+		ctx.fillText("\u201C" + current.text + "\u201D", cx + (onRight ? -16 : 16), cy -12);
+	}
+	requestAnimationFrame(draw);
+}
+
+async function placeText(text){
+	text = text.trim();
+	if (!text || !model) return;
+	const z = await embed(text);
+	const [x, y] = toMap(z);
+	current = { x: x, y: y, top: nearest(z, 10), text: text, start: performance.now() };
+	resetIdle();
+}
+
+
+function resetIdle() {
+	clearTimeout(idleTimer);
+	idleTimer = setTimeout(() => {
+		current = null;
+		input.value = "";
+	}, IDLE_MS);
+}
+
+document.getElementById("panel").addEventListener("submit", (e) => {
+	e.preventDefault();
+	input.blur();
+	placeText(input.value);
+});
+
+document.getElementById("suprise").addEventListener("click", () => {
+	const pick = SURPRISES[Math.floor(Math.random() * SURPRISES.length)];
+	input.value = pick;
+	placeText(pick);
+});
+
+
+window.addEventListener("resize", resize);
+resize();
+fetch("map_points.json")
+	.then((r) => r.json())
+	.then((p) => { points = p; });
+requestAnimationFrame(draw);
+
+const controls = document.querySelectorAll("#panel input, #panel button");
+const intro = info.innerHTML;
+controls.forEach((el) => { el.disabled = true; });
+info.textContent = "Loading the model\u2026 the first visit can take a minute.";
+
+async function runCheck() {
+	const ref = await fetch("check.json").then((r) => r.json());
+	const lines = [];
+	for (const r of ref){
+		const z = await embed(r.text);
+		const [x, y] = toMap(z);
+		const same = nearest(z, 10).filter((i) => r.top.includes(i)).length;
+		const moved = Math.hypot(x -r.x, y-r.y).toFixed(4);
+		lines.push(same + "/10 same, moved " +moved + " \u2014 " + r.text);
+	}
+	info.innerHTML = lines.join("<br>");
+}
+
+loadModel()
+	.then(() => {
+		controls.forEach((el) => { el.disabled = false; });
+		info.innerHTML = intro;
+		if (location.search.includes("check")) runCheck();
+	})
+	.catch((err) => {
+		info.textContent = "Couldn't load the model: " + err;
+	});
+
+</script>
+</body>
+</html>
