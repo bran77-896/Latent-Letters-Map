@@ -160,14 +160,17 @@ function drawAxes(w, h) {
 	ctx.fillStyle = "#777";
 	ctx.font = "15px -apple-system, system-ui, sans-serif";
 	ctx.textAlign = "left";
-	ctx.fillText("<- less pleasant", PAD, bottom + 30);
+	ctx.fillText("<- Less Pleasant", PAD, bottom + 30);
 	ctx.textAlign = "right";
-	ctx.fillText("more pleasant ->", w - PAD, bottom + 30);
+	ctx.fillText("More Pleasant ->", w - PAD, bottom + 30);
 	ctx.save();
 	ctx.translate(PAD - 30, h / 2 - PANEL / 2);
 	ctx.rotate(-Math.PI / 2);
-	ctx.textAlign = "center";
-	ctx.fillText("calmer        -       more energy ->", 0, 0);
+	const GAP = 60;
+	ctx.textAlign = "right";
+	ctx.fillText("<- Less Energy", -GAP, 0);
+	ctx.textAlign = "left";
+	ctx.fillText("More Energy ->", GAP, 0);
 	ctx.restore();
 }
 
