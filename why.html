@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Latent Letters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+	:root {
+		--bg: #1F1F1F;
+		--text: #FEFEEA;
+		--muted: rgba(254, 254, 234, 0.62);
+		--line: rgba(254, 254, 234, 0.14);
+		--track: rgba(254, 254, 234, 0.08);
+		--peri: #B7AAFC;
+		--lime: #B5ED7D;
+	}
+	* { box-sizing: border-box; }
+	html, body { margin: 0; background: var(--bg); color: var(--text); font-family: "Inter", -apple-system, system-ui, sans-serif; }
+	main { max-width: 560px; margin: 0 auto; padding: 40px 20px 60px; }
+
+	header h1 { margin: 0; font-size: 38px; font-weight: 700; letter-spacing: -0.02em; }
+	header p { margin: 8px 0 0; font-size: 16px; line-height: 1.45; color: var(--muted); }
+
+	#entry { margin-top: 36px; }
+	#entry label { display: block; font-size: 15px; color: var(--muted); margin-bottom: 10px; }
+	#entry .row { display: flex; gap: 10px; }
+	#code { flex: 1; min-width: 0; font: 600 32px "Inter", sans-serif; letter-spacing: 0.35em; text-align: center; padding: 12px 10px; border-radius: 12px; border: 1px solid var(--line); background: #2a2a2a; color: var(--text); }
+	#code:focus { outline: 2px solid var(--peri); outline-offset: 1px; }
+	button { font: 600 16px "Inter", sans-serif; padding: 12px 18px; border-radius: 12px; border: 0; background: var(--lime); color: var(--bg); }
+	button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
+	#status { min-height: 1.4em; margin: 12px 0 0; font-size: 15px; line-height: 1.45; color: var(--muted); }
+
+	section { padding: 36px 0; border-top: 1px solid var(--line); opacity: 0; transform: translateY(24px); transition: opacity 0.7s ease, transform 0.7s ease; }
+	section.visible { opacity: 1; transform: none; }
+	section:first-child { border-top: 0; }
+	h2 { margin: 0 0 6px; font-size: 13px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--lime); }
+	.note { margin: 14px 0 0; font-size: 15px; line-height: 1.5; color: var(--muted); }
+	.note b { color: var(--text); font-weight: 600; }
+
+	.photo { width: 100%; aspect-ratio: 16 / 9; border-radius: 14px; background: var(--track); display: grid; place-items: center; overflow: hidden; color: var(--muted); font-size: 15px; }
+	.photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+	.photo.waiting span { animation: pulse 1.6s ease-in-out infinite; }
+	@keyframes pulse { 50% { opacity: 0.35; } }
+
+	.sentence { margin: 10px 0 0; font-size: 26px; line-height: 1.6; font-weight: 400; }
+	.sentence .strong { font-weight: 700; border: 2px solid var(--peri); border-radius: 6px; padding: 0 6px; }
+
+	.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+	.card { background: var(--track); border-radius: 14px; padding: 14px; }
+	.card .word { font-weight: 700; font-size: 18px; overflow-wrap: anywhere; }
+	.card .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+	.bars { display: flex; gap: 18px; align-items: flex-end; height: 96px; margin-top: 14px; }
+	.bar { width: 30px; height: 100%; background: var(--track); border-radius: 6px; position: relative; overflow: hidden; }
+	.bar .fill { position: absolute; left: 0; right: 0; bottom: 0; height: 0; border-radius: 6px; transition: height 1s ease 0.3s; }
+	section.visible .bar .fill { height: var(--v); }
+	.bar.p .fill { background: var(--peri); }
+	.bar.e .fill { background: var(--lime); }
+	.labels { display: flex; gap: 18px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+	.labels span { width: 30px; text-align: center; }
+	.legend { display: flex; gap: 16px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+	.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+	.palettes { display: grid; gap: 6px; margin-top: 14px; }
+	.pal { display: flex; height: 34px; border-radius: 6px; overflow: hidden; }
+	.pal div { min-width: 2px; }
+	.palettes.small .pal { height: 26px; }
+
+	.wordmap { margin-top: 4px; }
+	.note + .wordmap { margin-top: 20px; }
+	.wordmap .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+	.wordmap .head b { font-size: 20px; overflow-wrap: anywhere; }
+	.wordmap .head span { font-size: 14px; color: var(--peri); font-weight: 600; }
+	.wordmap .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+	.wordmap.rest .head b { font-weight: 400; color: var(--muted); }
+	.wordmap.total { margin-top: 0; padding: 14px; border: 1px solid var(--lime); border-radius: 14px; }
+	.wordmap.total .head span { color: var(--lime); }
+	.joiner { text-align: center; font-size: 22px; font-weight: 600; color: var(--muted); margin: 10px 0 8px; }
+
+	footer { margin-top: 10px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 13px; line-height: 1.5; color: var(--muted); }
+	footer a { color: var(--text); }
+	#again { display: block; margin-top: 24px; }
+
+	@media (prefers-reduced-motion: reduce) {
+		section { transition: none; opacity: 1; transform: none; }
+		.bar .fill { transition: none; }
+	}
+</style>
+</head>
+<body>
+<main>
+	<header>
+		<h1>Latent Letters</h1>
+		<p>A study of color language through the chroma of flower petals.</p>
+	</header>
+
+	<form id="entry">
+		<label for="code">Enter the 4-digit code from the wall</label>
+		<div class="row">
+			<input id="code" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="0000">
+			<button type="submit">See my colors</button>
+		</div>
+		<p id="status"></p>
+	</form>
+
+	<div id="results"></div>
+</main>
+
+<script>
+const DB = "https://latent-letters-default-rtdb.firebaseio.com";
+const MAX_AGE_MS = 5 * 60 * 1000;
+const DEMO = location.search.includes("demo");
+
+const form = document.getElementById("entry");
+const input = document.getElementById("code");
+const statusLine = document.getElementById("status");
+const results = document.getElementById("results");
+
+const fader = new IntersectionObserver((entries) => {
+	for (const e of entries) e.target.classList.toggle("visible", e.isIntersecting);
+}, { threshold: 0.15 });
+
+
+function sleep(ms) {
+	return new Promise((r) => setTimeout(r, ms));
+}
+
+function el(tag, cls, text) {
+	const node = document.createElement(tag);
+	if (cls) node.className = cls;
+	if (text !== undefined) node.textContent = text;
+	return node;
+}
+
+async function getJSON(path) {
+	if (DEMO) return fetch("demo.json").then((r) => r.json());
+	const res = await fetch(`${DB}/${path}.json`);
+	if (!res.ok) throw new Error("status " + res.status);
+	return res.json();
+}
+
+
+// words for the explanations
+
+function level(v, words) {
+	return v < 0.4 ? words[0] : v > 0.6 ? words[2] : words[1];
+}
+const feelPleasant = (v) => level(v, ["unpleasant", "fairly neutral", "pleasant"]);
+const feelEnergy = (v) => level(v, ["calm", "a little energetic", "energetic"]);
+const colorLight = (v) => level(v, ["darker", "mid-toned", "lighter"]);
+const colorVivid = (v) => level(v, ["softer and more muted", "moderately colorful", "more vivid"]);
+const pct = (v) => Math.round(v * 100);
+
+
+// building blocks
+
+function section(title) {
+	const s = el("section");
+	s.appendChild(el("h2", "", title));
+	results.appendChild(s);
+	fader.observe(s);
+	return s;
+}
+
+function note(parent, html) {
+	const p = el("p", "note");
+	p.innerHTML = html;
+	parent.appendChild(p);
+}
+
+function paletteRow(pal) {
+	const row = el("div", "pal");
+	pal.colors.forEach((c, i) => {
+		const block = el("div");
+		block.style.background = c;
+		block.style.flex = pal.weights[i];
+		row.appendChild(block);
+	});
+	return row;
+}
+
+function palettes(list, small) {
+	const box = el("div", small ? "palettes small" : "palettes");
+	for (const pal of list) box.appendChild(paletteRow(pal));
+	return box;
+}
+
+function wordmap(piece) {
+	const block = el("div", "wordmap" + (piece.rest ? " rest" : "") + (piece.total ? " total" : ""));
+	const head = el("div", "head");
+	head.appendChild(el("b", "", piece.label));
+	head.appendChild(el("span", "", pct(piece.share) + "%"));
+	block.appendChild(head);
+	if (piece.sub) block.appendChild(el("div", "sub", piece.sub));
+	block.appendChild(palettes(piece.palettes, true));
+	return block;
+}
+
+function card(word, sub, pleasant, energy) {
+	const c = el("div", "card");
+	c.appendChild(el("div", "word", word));
+	c.appendChild(el("div", "sub", sub));
+	const bars = el("div", "bars");
+	const labels = el("div", "labels");
+	for (const [cls, v] of [["p", pleasant], ["e", energy]]) {
+		const bar = el("div", "bar " + cls);
+		const fill = el("div", "fill");
+		fill.style.setProperty("--v", pct(v) + "%");
+		bar.appendChild(fill);
+		bars.appendChild(bar);
+		labels.appendChild(el("span", "", pct(v)));
+	}
+	c.appendChild(bars);
+	c.appendChild(labels);
+	return c;
+}
+
+
+// the page
+
+function render(data, code) {
+	results.innerHTML = "";
+	const words = data.words || [];
+	const strong = data.strong || [];
+	const strongIdx = new Set(strong.map((s) => s.i));
+
+	// 1. photo
+	const s1 = section("Your moment");
+	const photo = el("div", "photo waiting");
+	photo.appendChild(el("span", "", "Capturing your moment…"));
+	s1.appendChild(photo);
+	const photoNote = el("p", "note", "The wall at its most colorful, just after you pressed Enter.");
+	s1.appendChild(photoNote);
+	showPhoto(photo, photoNote, data.photo, code);
+
+	// 2. sentence
+	const s2 = section("Your words");
+	const sentence = el("p", "sentence");
+	words.forEach((w, i) => {
+		sentence.appendChild(el("span", strongIdx.has(i) ? "strong" : "", w.w));
+		sentence.appendChild(document.createTextNode(" "));
+	});
+	s2.appendChild(sentence);
+	note(s2, "The <b>boxed words</b> changed your colors the most. To find them, the model takes out one word at a time and measures how far the result moves.");
+
+	// 3. feeling breakdown
+	const s3 = section("How it felt");
+	const cards = el("div", "cards");
+	cards.appendChild(card("Your sentence", "as a whole", data.pleasant, data.energy));
+	for (const s of strong) {
+		cards.appendChild(card(words[s.i].w, pct(words[s.i].share) + "% of the result", s.pleasant, s.energy));
+	}
+	s3.appendChild(cards);
+	const legend = el("div", "legend");
+	legend.innerHTML = '<span><i style="background:var(--peri)"></i>Pleasantness (valence)</span><span><i style="background:var(--lime)"></i>Energy (arousal)</span>';
+	s3.appendChild(legend);
+	note(s3, `Your sentence reads as <b>${feelPleasant(data.pleasant)}</b> and <b>${feelEnergy(data.energy)}</b>. Scores run from 0 to 100.`);
+
+	// 4. colors
+	const s4 = section("Your colors");
+	s4.appendChild(palettes(data.palettes));
+	note(s4, "These are the 10 real flowers whose colors sit closest to your sentence. Each row is one flower, and each block is as wide as that color is on its petals.");
+	note(s4, `<b>Why these colors?</b> Pleasant feelings pull toward <b>lighter</b> colors, and energetic feelings pull toward <b>more vivid</b> ones. Your sentence was ${feelPleasant(data.pleasant)} and ${feelEnergy(data.energy)}, so the model chose flowers that are <b>${colorLight(data.pleasant)}</b> and <b>${colorVivid(data.energy)}</b>. Hue isn't part of it: the model never learned that red means anger or blue means sadness, only how light and how intense a color is.`);
+
+	// 5. word to colors
+	const s5 = section("Word by word");
+	note(s5, "<b>On its own</b>, each word maps to its own colors. Here are your strongest words, the rest of your sentence, and what they become together.");
+	const pieces = strong.map((s) => ({ label: words[s.i].w, share: words[s.i].share, palettes: s.palettes }));
+	if (data.rest) {
+		pieces.push({
+			label: data.rest.i.map((i) => words[i].w).join(" · "),
+			sub: "the rest of your words, averaged",
+			share: data.rest.share,
+			palettes: data.rest.palettes,
+			rest: true,
+		});
+	}
+	pieces.forEach((piece, n) => {
+		if (n > 0) s5.appendChild(el("div", "joiner", "+"));
+		s5.appendChild(wordmap(piece));
+	});
+	s5.appendChild(el("div", "joiner", "="));
+	s5.appendChild(wordmap({ label: "Your sentence", sub: "read all together", share: 1, palettes: data.palettes.slice(0, 3), total: true }));
+	note(s5, "The words around each one change what it means, so your sentence isn't a simple mix of its parts. The model reads the whole sentence at once, which is why your colors can be softer or stronger than any single word.");
+
+	const footer = el("footer");
+	footer.innerHTML = 'Your sentence is deleted from the server when the next person types, or 2 minutes after you did. Press and hold the photo to save it.<br><br>Latent Letters by <a href="https://www.brandirourk-portfolio.com/">Brandi Rourk</a>';
+	const again = el("button", "ghost", "Enter another code");
+	again.id = "again";
+	again.addEventListener("click", reset);
+	footer.appendChild(again);
+	results.appendChild(footer);
+
+	form.style.display = "none";
+	window.scrollTo({ top: 0 });
+}
+
+async function showPhoto(box, caption, photo, code) {
+	for (let tries = 0; !photo && tries < 20; tries++) {
+		await sleep(2000);
+		photo = await getJSON(`results/${code}/photo`).then((d) => DEMO ? "demo_moment.jpg" : d).catch(() => null);
+	}
+	box.classList.remove("waiting");
+	box.innerHTML = "";
+	if (photo) {
+		const img = el("img");
+		img.alt = "The wall just after you pressed Enter";
+		img.src = photo;
+		box.appendChild(img);
+	} else {
+		box.appendChild(el("span", "", "No photo this time"));
+		caption.textContent = "The wall didn't send a photo for this one, but your colors are below.";
+	}
+}
+
+
+// code entry
+
+async function lookup(code) {
+	statusLine.textContent = "Looking up your code…";
+	let data = null;
+	for (let tries = 0; tries < 4; tries++) {
+		try {
+			data = await getJSON(`results/${code}`);
+		} catch (err) {
+			statusLine.textContent = "Couldn't reach the server. Check your connection and try again.";
+			return;
+		}
+		if (data && data.palettes) break;
+		await sleep(1500);
+	}
+	const old = data && data.time && !DEMO && Date.now() - data.time > MAX_AGE_MS;
+	if (!data || !data.palettes || old) {
+		statusLine.textContent = "That code isn't active. Codes last 2 minutes, and end when the next person types. Type something new at the wall to get a fresh one.";
+		return;
+	}
+	statusLine.textContent = "";
+	render(data, code);
+}
+
+function reset() {
+	results.innerHTML = "";
+	form.style.display = "";
+	input.value = "";
+	statusLine.textContent = "";
+	input.focus();
+}
+
+form.addEventListener("submit", (e) => {
+	e.preventDefault();
+	const code = input.value.replace(/\D/g, "");
+	if (code.length !== 4) {
+		statusLine.textContent = "Codes are 4 digits.";
+		return;
+	}
+	input.blur();
+	lookup(code);
+});
+
+input.addEventListener("input", () => {
+	input.value = input.value.replace(/\D/g, "").slice(0, 4);
+	if (input.value.length === 4) form.requestSubmit();
+});
+</script>
+</body>
+</html>
